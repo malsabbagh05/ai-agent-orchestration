@@ -33,4 +33,8 @@ def test_cli_can_start_and_inspect_a_run(tmp_path: Path, capsys) -> None:
     snapshot = json.loads(capsys.readouterr().out)
     assert snapshot["run"]["status"] == "running"
     assert snapshot["steps"][0]["status"] == "completed"
-    assert snapshot["steps"][0]["result"]["support_request"]["order_id"] == "ORD-1001"
+    context = snapshot["steps"][0]["result"]
+    assert context["support_request"]["order_id"] == "ORD-1001"
+    assert context["order"]["currency"] == "USD"
+    assert context["refund_history"] == {"refunds": []}
+    assert snapshot["steps"][1]["result"]["eligible"] is True
