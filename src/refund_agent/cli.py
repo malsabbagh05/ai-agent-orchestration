@@ -1,13 +1,15 @@
-"""Command-line interface for the refund support agent.
-
-The commands are registered here first. The workflow implementation will be connected to them in
-later commits.
-"""
+"""Command-line interface for the refund support agent."""
 
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import sys
 from collections.abc import Sequence
+
+from .orchestration import Orchestrator
+from .persistence import RunStore
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -16,6 +18,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="refund-agent",
         description="Run and inspect durable customer refund workflows.",
+    )
+    parser.add_argument(
+        "--db",
+        default=os.environ.get("REFUND_AGENT_DB", "data/runs.sqlite3"),
+        help="SQLite database path (default: data/runs.sqlite3).",
     )
     parser.add_argument(
         "--version",
@@ -63,4 +70,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    parser.error(f"Command '{arguments.command}' is not implemented yet.")
+    if arguments.command not in {"start", "inspect"}:
+        parser.error(f"Command '{arguments.command}' is planned for a later step.")
+
+    store = RunStore(arguments.db)
+    try:
+        orchestrator = Orchestrator(store)
+        if arguments.command == "start":
+            result = orchestrator.start_run(arguments.request_id)
+        else:
+            result = orchestrator.inspect_run(arguments.run_id)
+    except (KeyError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        store.close()
+
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
