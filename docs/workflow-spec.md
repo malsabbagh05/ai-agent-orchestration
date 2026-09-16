@@ -88,6 +88,7 @@ A step can be:
 - `completed`
 - `failed`
 - `skipped`
+- `cancelled`
 
 ## Pause and checkpoint rules
 
