@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from .states import RunStatus, StepStatus
+from .states import BusinessOutcome, PauseReason, RunStatus, StepStatus
 
 
 def utc_now() -> str:
@@ -20,6 +20,9 @@ class RunRecord:
     run_id: str
     request_id: str
     status: RunStatus
+    business_outcome: BusinessOutcome | None
+    pause_reason: PauseReason | None
+    pause_data: dict[str, Any]
     input_data: dict[str, Any]
     created_at: str
     updated_at: str
@@ -33,6 +36,7 @@ class StepRecord:
     step_number: int
     name: str
     status: StepStatus
+    pause_reason: PauseReason | None
     result: dict[str, Any] | None
     started_at: str | None
     completed_at: str | None

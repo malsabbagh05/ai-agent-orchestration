@@ -31,10 +31,17 @@ def test_cli_can_start_and_inspect_a_run(tmp_path: Path, capsys) -> None:
 
     assert main(["--db", str(database), "inspect", run_id]) == 0
     snapshot = json.loads(capsys.readouterr().out)
-    assert snapshot["run"]["status"] == "running"
+    assert snapshot["run"]["status"] == "paused"
+    assert snapshot["run"]["pause_reason"] == "approval"
     assert snapshot["steps"][0]["status"] == "completed"
     context = snapshot["steps"][0]["result"]
     assert context["support_request"]["order_id"] == "ORD-1001"
     assert context["order"]["currency"] == "USD"
     assert context["refund_history"] == {"refunds": []}
     assert snapshot["steps"][1]["result"]["eligible"] is True
+    assert snapshot["steps"][2]["status"] == "paused"
+
+    assert main(["--db", str(database), "approve", run_id, "--decision", "reject"]) == 0
+    rejected = json.loads(capsys.readouterr().out)
+    assert rejected["run"]["status"] == "completed"
+    assert rejected["run"]["business_outcome"] == "rejected"

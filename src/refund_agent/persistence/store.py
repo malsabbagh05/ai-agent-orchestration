@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ..domain.records import RunRecord, StepRecord, utc_now
-from ..domain.states import RunStatus, StepStatus
+from ..domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
 from .schema import SCHEMA
 
 
@@ -23,7 +23,27 @@ class RunStore:
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.executescript(SCHEMA)
+        self._migrate_schema()
         self.connection.commit()
+
+    def _migrate_schema(self) -> None:
+        """Add fields introduced by later slices to an existing local database."""
+
+        tables = {
+            "runs": {
+                "business_outcome": "TEXT",
+                "pause_reason": "TEXT",
+                "pause_data": "TEXT NOT NULL DEFAULT '{}'",
+            },
+            "steps": {"pause_reason": "TEXT"},
+        }
+        for table, additions in tables.items():
+            columns = {
+                row["name"] for row in self.connection.execute(f"PRAGMA table_info({table})")
+            }
+            for name, definition in additions.items():
+                if name not in columns:
+                    self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
 
     def close(self) -> None:
         """Close the database connection."""
@@ -68,6 +88,11 @@ class RunStore:
             run_id=row["run_id"],
             request_id=row["request_id"],
             status=RunStatus(row["status"]),
+            business_outcome=(
+                BusinessOutcome(row["business_outcome"]) if row["business_outcome"] else None
+            ),
+            pause_reason=PauseReason(row["pause_reason"]) if row["pause_reason"] else None,
+            pause_data=json.loads(row["pause_data"] or "{}"),
             input_data=json.loads(row["input_data"]),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
@@ -86,6 +111,7 @@ class RunStore:
                 step_number=row["step_number"],
                 name=row["name"],
                 status=StepStatus(row["status"]),
+                pause_reason=PauseReason(row["pause_reason"]) if row["pause_reason"] else None,
                 result=json.loads(row["result"]) if row["result"] else None,
                 started_at=row["started_at"],
                 completed_at=row["completed_at"],
@@ -93,13 +119,33 @@ class RunStore:
             for row in rows
         ]
 
-    def update_run(self, run_id: str, *, status: RunStatus) -> RunRecord:
-        """Persist a run status transition."""
+    def update_run(
+        self,
+        run_id: str,
+        *,
+        status: RunStatus,
+        business_outcome: BusinessOutcome | None = None,
+        pause_reason: PauseReason | None = None,
+        pause_data: dict[str, Any] | None = None,
+    ) -> RunRecord:
+        """Persist a run status transition and its waiting metadata."""
 
         with self.connection:
             cursor = self.connection.execute(
-                "UPDATE runs SET status = ?, updated_at = ? WHERE run_id = ?",
-                (status.value, utc_now(), run_id),
+                """
+                UPDATE runs
+                SET status = ?, business_outcome = ?, pause_reason = ?, pause_data = ?,
+                    updated_at = ?
+                WHERE run_id = ?
+                """,
+                (
+                    status.value,
+                    business_outcome.value if business_outcome else None,
+                    pause_reason.value if pause_reason else None,
+                    json.dumps(pause_data or {}),
+                    utc_now(),
+                    run_id,
+                ),
             )
         if cursor.rowcount != 1:
             raise KeyError(f"Run '{run_id}' was not found.")
@@ -111,6 +157,7 @@ class RunStore:
         step_number: int,
         *,
         status: StepStatus,
+        pause_reason: PauseReason | None = None,
         result: dict[str, Any] | None = None,
         started_at: str | None = None,
         completed_at: str | None = None,
@@ -121,12 +168,14 @@ class RunStore:
             cursor = self.connection.execute(
                 """
                 UPDATE steps
-                SET status = ?, result = ?, started_at = COALESCE(?, started_at),
+                SET status = ?, pause_reason = ?, result = ?,
+                    started_at = COALESCE(?, started_at),
                     completed_at = COALESCE(?, completed_at)
                 WHERE run_id = ? AND step_number = ?
                 """,
                 (
                     status.value,
+                    pause_reason.value if pause_reason else None,
                     json.dumps(result) if result is not None else None,
                     started_at,
                     completed_at,

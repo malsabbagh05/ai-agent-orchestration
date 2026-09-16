@@ -5,13 +5,13 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from ..domain.records import RunRecord, StepRecord, utc_now
-from ..domain.states import RunStatus, StepStatus
+from ..domain.records import utc_now
+from ..domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
 from ..eligibility import EligibilityAgent
 from ..persistence import RunStore
 from ..tools.interfaces import CaseContextTools
-
-WORKFLOW_STEPS = ("collect_case_context", "assess_eligibility")
+from .steps import WORKFLOW_STEPS
+from .views import run_to_dict, step_to_dict
 
 
 class Orchestrator:
@@ -49,6 +49,13 @@ class Orchestrator:
         )
         self._collect_case_context(run_id)
         self._assess_eligibility(run_id)
+        assessment = self.store.get_steps(run_id)[1].result
+        if assessment is None:
+            raise ValueError("Eligibility result is missing.")
+        if assessment["eligible"]:
+            self._pause_for_approval(run_id)
+        else:
+            self._skip_refund_step(run_id)
         return self.inspect_run(run_id)
 
     def _collect_case_context(self, run_id: str) -> None:
@@ -97,35 +104,94 @@ class Orchestrator:
             completed_at=utc_now(),
         )
 
+    def _pause_for_approval(self, run_id: str) -> None:
+        """Checkpoint the approval gate before the refund action exists."""
+
+        self.store.update_step(
+            run_id,
+            3,
+            status=StepStatus.RUNNING,
+            started_at=utc_now(),
+        )
+        self.store.update_step(
+            run_id,
+            3,
+            status=StepStatus.PAUSED,
+            pause_reason=PauseReason.APPROVAL,
+        )
+        self.store.update_run(
+            run_id,
+            status=RunStatus.PAUSED,
+            pause_reason=PauseReason.APPROVAL,
+            pause_data={"required_step": 3},
+        )
+
+    def _skip_refund_step(self, run_id: str) -> None:
+        """Complete an ineligible request without entering the approval gate."""
+
+        self.store.update_step(
+            run_id,
+            3,
+            status=StepStatus.SKIPPED,
+            completed_at=utc_now(),
+        )
+        self.store.update_run(
+            run_id,
+            status=RunStatus.COMPLETED,
+            business_outcome=BusinessOutcome.INELIGIBLE,
+        )
+
+    def approve(self, run_id: str, decision: str) -> dict[str, Any]:
+        """Record an approval decision and leave approved work at its checkpoint."""
+
+        if decision not in {"approve", "reject"}:
+            raise ValueError("decision must be 'approve' or 'reject'")
+
+        run = self.store.get_run(run_id)
+        step = self.store.get_steps(run_id)[2]
+        recorded = step.result.get("decision") if step.result else run.pause_data.get("approval")
+        if recorded is not None:
+            if recorded != decision:
+                raise ValueError("A different approval decision was already recorded.")
+            return self.inspect_run(run_id)
+        if run.status != RunStatus.PAUSED or run.pause_reason != PauseReason.APPROVAL:
+            raise ValueError("The run is not waiting for approval.")
+
+        if decision == "reject":
+            self.store.update_step(
+                run_id,
+                3,
+                status=StepStatus.COMPLETED,
+                result={"decision": "reject"},
+                pause_reason=None,
+                completed_at=utc_now(),
+            )
+            self.store.update_run(
+                run_id,
+                status=RunStatus.COMPLETED,
+                business_outcome=BusinessOutcome.REJECTED,
+            )
+            return self.inspect_run(run_id)
+
+        self.store.update_step(
+            run_id,
+            3,
+            status=StepStatus.RUNNING,
+            pause_reason=None,
+        )
+        self.store.update_run(
+            run_id,
+            status=RunStatus.RUNNING,
+            pause_data={"approval": "approve"},
+        )
+        return self.inspect_run(run_id)
+
     def inspect_run(self, run_id: str) -> dict[str, Any]:
         """Return the run and its ordered steps as JSON-ready dictionaries."""
 
         run = self.store.get_run(run_id)
         steps = self.store.get_steps(run_id)
         return {
-            "run": self._run_to_dict(run),
-            "steps": [self._step_to_dict(step) for step in steps],
-        }
-
-    @staticmethod
-    def _run_to_dict(run: RunRecord) -> dict[str, Any]:
-        return {
-            "run_id": run.run_id,
-            "request_id": run.request_id,
-            "status": run.status.value,
-            "input_data": run.input_data,
-            "created_at": run.created_at,
-            "updated_at": run.updated_at,
-        }
-
-    @staticmethod
-    def _step_to_dict(step: StepRecord) -> dict[str, Any]:
-        return {
-            "run_id": step.run_id,
-            "step_number": step.step_number,
-            "name": step.name,
-            "status": step.status.value,
-            "result": step.result,
-            "started_at": step.started_at,
-            "completed_at": step.completed_at,
+            "run": run_to_dict(run),
+            "steps": [step_to_dict(step) for step in steps],
         }

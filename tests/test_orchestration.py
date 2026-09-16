@@ -15,7 +15,8 @@ def test_start_completes_the_first_context_step(tmp_path) -> None:
 
     snapshot = orchestrator.start_run("REQ-1001")
 
-    assert snapshot["run"]["status"] == RunStatus.RUNNING.value
+    assert snapshot["run"]["status"] == RunStatus.PAUSED.value
+    assert snapshot["run"]["pause_reason"] == "approval"
     assert snapshot["run"]["request_id"] == "REQ-1001"
     assert snapshot["steps"][0]["status"] == StepStatus.COMPLETED.value
     context = snapshot["steps"][0]["result"]
@@ -25,6 +26,9 @@ def test_start_completes_the_first_context_step(tmp_path) -> None:
     assert snapshot["steps"][1]["name"] == "assess_eligibility"
     assert snapshot["steps"][1]["status"] == StepStatus.COMPLETED.value
     assert snapshot["steps"][1]["result"]["eligible"] is True
+    assert snapshot["steps"][2]["name"] == "approve_and_issue_refund"
+    assert snapshot["steps"][2]["status"] == StepStatus.PAUSED.value
+    assert snapshot["steps"][2]["pause_reason"] == "approval"
     assert snapshot["steps"][0]["started_at"] is not None
     assert snapshot["steps"][0]["completed_at"] is not None
     assert tools.calls == [
@@ -47,4 +51,5 @@ def test_inspect_reads_the_same_run_after_reopening(tmp_path) -> None:
     assert snapshot["run"]["run_id"] == run_id
     assert snapshot["steps"][0]["status"] == StepStatus.COMPLETED.value
     assert snapshot["steps"][1]["status"] == StepStatus.COMPLETED.value
+    assert snapshot["steps"][2]["status"] == StepStatus.PAUSED.value
     reopened.close()

@@ -71,7 +71,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    if arguments.command not in {"start", "inspect"}:
+    if arguments.command not in {"start", "inspect", "approve"}:
         parser.error(f"Command '{arguments.command}' is planned for a later step.")
 
     store = RunStore(arguments.db)
@@ -79,8 +79,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         orchestrator = Orchestrator(store, MockCaseContextTools())
         if arguments.command == "start":
             result = orchestrator.start_run(arguments.request_id)
-        else:
+        elif arguments.command == "inspect":
             result = orchestrator.inspect_run(arguments.run_id)
+        else:
+            result = orchestrator.approve(arguments.run_id, arguments.decision)
     except (KeyError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

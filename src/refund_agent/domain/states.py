@@ -24,3 +24,16 @@ class StepStatus(str, Enum):
     FAILED = "failed"
     SKIPPED = "skipped"
     CANCELLED = "cancelled"
+
+
+class PauseReason(str, Enum):
+    """Reason a run or step is waiting for an external decision."""
+
+    APPROVAL = "approval"
+
+
+class BusinessOutcome(str, Enum):
+    """Business result recorded when a run reaches a decision."""
+
+    INELIGIBLE = "ineligible"
+    REJECTED = "rejected"
