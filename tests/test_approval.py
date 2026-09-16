@@ -7,13 +7,14 @@ import pytest
 from refund_agent.domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
 from refund_agent.orchestration import Orchestrator
 from refund_agent.persistence import RunStore
-from refund_agent.tools import MockCaseContextTools
+from refund_agent.tools import MockRefundTools
 
 
 def test_approval_pause_happens_before_refund_step(tmp_path) -> None:
     database_path = tmp_path / "runs.sqlite3"
     store = RunStore(database_path)
-    orchestrator = Orchestrator(store, MockCaseContextTools())
+    tools = MockRefundTools(store)
+    orchestrator = Orchestrator(store, tools)
 
     paused = orchestrator.start_run("REQ-1001")
     run_id = paused["run"]["run_id"]
@@ -26,8 +27,11 @@ def test_approval_pause_happens_before_refund_step(tmp_path) -> None:
     approved = orchestrator.approve(run_id, "approve")
     assert approved["run"]["status"] == RunStatus.RUNNING.value
     assert approved["run"]["pause_data"] == {"approval": "approve"}
-    assert approved["steps"][2]["status"] == StepStatus.RUNNING.value
+    assert approved["steps"][2]["status"] == StepStatus.COMPLETED.value
+    assert approved["steps"][2]["result"]["idempotency_key"] == "refund:REQ-1001"
+    assert len(tools.refund_effects) == 1
     assert orchestrator.approve(run_id, "approve")["run"]["status"] == "running"
+    assert len(tools.refund_effects) == 1
     with pytest.raises(ValueError):
         orchestrator.approve(run_id, "reject")
     store.close()
@@ -36,7 +40,7 @@ def test_approval_pause_happens_before_refund_step(tmp_path) -> None:
 def test_rejection_completes_without_entering_refund_action(tmp_path) -> None:
     database_path = tmp_path / "runs.sqlite3"
     store = RunStore(database_path)
-    orchestrator = Orchestrator(store, MockCaseContextTools())
+    orchestrator = Orchestrator(store, MockRefundTools(store))
     run_id = orchestrator.start_run("REQ-1001")["run"]["run_id"]
 
     rejected = orchestrator.approve(run_id, "reject")
@@ -60,7 +64,7 @@ def test_ineligible_request_skips_approval(tmp_path) -> None:
     store = RunStore(database_path)
     orchestrator = Orchestrator(
         store,
-        MockCaseContextTools(orders={"ORD-1001": old_order}),
+        MockRefundTools(store, orders={"ORD-1001": old_order}),
     )
 
     completed = orchestrator.start_run("REQ-1001")

@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 from .orchestration import Orchestrator
 from .persistence import RunStore
-from .tools import MockCaseContextTools
+from .tools import MockRefundTools
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -76,7 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store = RunStore(arguments.db)
     try:
-        orchestrator = Orchestrator(store, MockCaseContextTools())
+        orchestrator = Orchestrator(store, MockRefundTools(store))
         if arguments.command == "start":
             result = orchestrator.start_run(arguments.request_id)
         elif arguments.command == "inspect":

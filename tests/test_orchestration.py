@@ -5,12 +5,12 @@ from __future__ import annotations
 from refund_agent.domain.states import RunStatus, StepStatus
 from refund_agent.orchestration import Orchestrator
 from refund_agent.persistence import RunStore
-from refund_agent.tools import MockCaseContextTools
+from refund_agent.tools import MockRefundTools
 
 
 def test_start_completes_the_first_context_step(tmp_path) -> None:
     store = RunStore(tmp_path / "runs.sqlite3")
-    tools = MockCaseContextTools()
+    tools = MockRefundTools(store)
     orchestrator = Orchestrator(store, tools)
 
     snapshot = orchestrator.start_run("REQ-1001")
@@ -42,11 +42,11 @@ def test_start_completes_the_first_context_step(tmp_path) -> None:
 def test_inspect_reads_the_same_run_after_reopening(tmp_path) -> None:
     database = tmp_path / "runs.sqlite3"
     store = RunStore(database)
-    run_id = Orchestrator(store, MockCaseContextTools()).start_run("REQ-1001")["run"]["run_id"]
+    run_id = Orchestrator(store, MockRefundTools(store)).start_run("REQ-1001")["run"]["run_id"]
     store.close()
 
     reopened = RunStore(database)
-    snapshot = Orchestrator(reopened, MockCaseContextTools()).inspect_run(run_id)
+    snapshot = Orchestrator(reopened, MockRefundTools(reopened)).inspect_run(run_id)
 
     assert snapshot["run"]["run_id"] == run_id
     assert snapshot["steps"][0]["status"] == StepStatus.COMPLETED.value

@@ -9,7 +9,8 @@ from ..domain.records import utc_now
 from ..domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
 from ..eligibility import EligibilityAgent
 from ..persistence import RunStore
-from ..tools.interfaces import CaseContextTools
+from ..tools.interfaces import RefundWorkflowTools
+from .refund_step import issue_refund
 from .steps import WORKFLOW_STEPS
 from .views import run_to_dict, step_to_dict
 
@@ -20,7 +21,7 @@ class Orchestrator:
     def __init__(
         self,
         store: RunStore,
-        tools: CaseContextTools,
+        tools: RefundWorkflowTools,
         agent: EligibilityAgent | None = None,
     ) -> None:
         self.store = store
@@ -184,6 +185,7 @@ class Orchestrator:
             status=RunStatus.RUNNING,
             pause_data={"approval": "approve"},
         )
+        issue_refund(self.store, self.tools, run_id)
         return self.inspect_run(run_id)
 
     def inspect_run(self, run_id: str) -> dict[str, Any]:

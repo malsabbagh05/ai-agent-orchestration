@@ -24,4 +24,11 @@ CREATE TABLE IF NOT EXISTS steps (
     completed_at TEXT,
     PRIMARY KEY (run_id, step_number)
 );
+
+CREATE TABLE IF NOT EXISTS idempotency (
+    idempotency_key TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    result TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """

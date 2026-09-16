@@ -23,3 +23,20 @@ class RefundHistoryReader(Protocol):
 
 class CaseContextTools(SupportRequestReader, OrderReader, RefundHistoryReader, Protocol):
     """Read-only tools needed to assemble the refund case context."""
+
+
+class RefundIssuer(Protocol):
+    """Issue a refund after the approval gate has opened."""
+
+    def issue_refund(
+        self,
+        *,
+        order_id: str,
+        amount: float,
+        currency: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]: ...
+
+
+class RefundWorkflowTools(CaseContextTools, RefundIssuer, Protocol):
+    """Tool surface currently needed by the refund workflow."""

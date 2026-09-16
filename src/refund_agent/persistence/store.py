@@ -9,6 +9,7 @@ from typing import Any
 
 from ..domain.records import RunRecord, StepRecord, utc_now
 from ..domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
+from .idempotency import IdempotencyStore
 from .schema import SCHEMA
 
 
@@ -25,6 +26,7 @@ class RunStore:
         self.connection.executescript(SCHEMA)
         self._migrate_schema()
         self.connection.commit()
+        self.idempotency = IdempotencyStore(self.connection)
 
     def _migrate_schema(self) -> None:
         """Add fields introduced by later slices to an existing local database."""

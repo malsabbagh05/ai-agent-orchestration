@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..persistence import RunStore
+
 DEFAULT_SUPPORT_REQUESTS = {
     "REQ-1001": {
         "request_id": "REQ-1001",
@@ -73,3 +75,42 @@ class MockCaseContextTools:
             return dict(values[key])
         except KeyError as exc:
             raise KeyError(f"{label} '{key}' was not found.") from exc
+
+
+class MockRefundTools(MockCaseContextTools):
+    """Add a durable, observable refund action to the read-tool mock."""
+
+    def __init__(self, store: RunStore, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.store = store
+        self.refund_effects: list[dict[str, Any]] = []
+
+    def issue_refund(
+        self,
+        *,
+        order_id: str,
+        amount: float,
+        currency: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Record one refund effect and reuse its result for duplicate keys."""
+
+        existing = self.store.idempotency.get(idempotency_key)
+        if existing is not None:
+            return {**existing, "deduplicated": True}
+        if order_id not in self.orders:
+            raise KeyError(f"Order '{order_id}' was not found.")
+        result = {
+            "refund_id": f"REF-{order_id}",
+            "order_id": order_id,
+            "amount": amount,
+            "currency": currency,
+            "status": "submitted",
+        }
+        stored = self.store.idempotency.record(
+            key=idempotency_key,
+            action="issue_refund",
+            result=result,
+        )
+        self.refund_effects.append(stored)
+        return stored
