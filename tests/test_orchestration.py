@@ -1,4 +1,4 @@
-"""Tests for the first execution slice."""
+"""Tests for workflow execution and restart inspection."""
 
 from __future__ import annotations
 

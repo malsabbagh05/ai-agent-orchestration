@@ -2,6 +2,7 @@
 
 from .interfaces import (
     CaseContextTools,
+    CustomerNotifier,
     OrderReader,
     RefundHistoryReader,
     RefundIssuer,
@@ -12,6 +13,7 @@ from .mocks import MockCaseContextTools, MockRefundTools
 
 __all__ = [
     "CaseContextTools",
+    "CustomerNotifier",
     "MockCaseContextTools",
     "MockRefundTools",
     "OrderReader",

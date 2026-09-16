@@ -30,6 +30,7 @@ class PauseReason(str, Enum):
     """Reason a run or step is waiting for an external decision."""
 
     APPROVAL = "approval"
+    PROVIDER_CONFIRMATION = "provider_confirmation"
 
 
 class BusinessOutcome(str, Enum):
@@ -37,3 +38,4 @@ class BusinessOutcome(str, Enum):
 
     INELIGIBLE = "ineligible"
     REJECTED = "rejected"
+    REFUNDED = "refunded"

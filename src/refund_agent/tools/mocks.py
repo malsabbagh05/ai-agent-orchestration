@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from ..errors import NonRetryableToolError, ToolError
 from ..persistence import RunStore
 
 DEFAULT_SUPPORT_REQUESTS = {
@@ -80,10 +81,43 @@ class MockCaseContextTools:
 class MockRefundTools(MockCaseContextTools):
     """Add a durable, observable refund action to the read-tool mock."""
 
-    def __init__(self, store: RunStore, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        store: RunStore,
+        *,
+        failures: dict[str, list[ToolError]] | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.store = store
+        self.failures = {name: list(errors) for name, errors in (failures or {}).items()}
+        self.invocations: dict[str, int] = {}
         self.refund_effects: list[dict[str, Any]] = []
+        self.notification_effects: list[dict[str, Any]] = []
+
+    def _before_action(self, name: str) -> None:
+        self.invocations[name] = self.invocations.get(name, 0) + 1
+        pending = self.failures.get(name, [])
+        if pending:
+            raise pending.pop(0)
+
+    def get_support_request(self, request_id: str) -> dict[str, Any]:
+        """Read a support request with optional failure injection."""
+
+        self._before_action("get_support_request")
+        return super().get_support_request(request_id)
+
+    def get_order(self, order_id: str) -> dict[str, Any]:
+        """Read an order with optional failure injection."""
+
+        self._before_action("get_order")
+        return super().get_order(order_id)
+
+    def get_refund_history(self, order_id: str) -> dict[str, Any]:
+        """Read refund history with optional failure injection."""
+
+        self._before_action("get_refund_history")
+        return super().get_refund_history(order_id)
 
     def issue_refund(
         self,
@@ -98,8 +132,9 @@ class MockRefundTools(MockCaseContextTools):
         existing = self.store.idempotency.get(idempotency_key)
         if existing is not None:
             return {**existing, "deduplicated": True}
+        self._before_action("issue_refund")
         if order_id not in self.orders:
-            raise KeyError(f"Order '{order_id}' was not found.")
+            raise NonRetryableToolError(f"Order '{order_id}' was not found.")
         result = {
             "refund_id": f"REF-{order_id}",
             "order_id": order_id,
@@ -113,4 +148,26 @@ class MockRefundTools(MockCaseContextTools):
             result=result,
         )
         self.refund_effects.append(stored)
+        return stored
+
+    def send_customer_notification(
+        self,
+        *,
+        customer_id: str,
+        message: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Record one notification and reuse its result for duplicate keys."""
+
+        existing = self.store.idempotency.get(idempotency_key)
+        if existing is not None:
+            return {**existing, "deduplicated": True}
+        self._before_action("send_customer_notification")
+        result = {"customer_id": customer_id, "message": message, "status": "sent"}
+        stored = self.store.idempotency.record(
+            key=idempotency_key,
+            action="send_customer_notification",
+            result=result,
+        )
+        self.notification_effects.append(stored)
         return stored

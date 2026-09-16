@@ -1,4 +1,4 @@
-"""Deterministic refund-policy assessment for the current workflow slice."""
+"""Deterministic refund-policy assessment for the refund workflow."""
 
 from __future__ import annotations
 

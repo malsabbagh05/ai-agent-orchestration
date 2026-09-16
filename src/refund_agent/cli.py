@@ -8,6 +8,7 @@ import os
 import sys
 from collections.abc import Sequence
 
+from .errors import OrchestrationError
 from .orchestration import Orchestrator
 from .persistence import RunStore
 from .tools import MockRefundTools
@@ -71,9 +72,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    if arguments.command not in {"start", "inspect", "approve"}:
-        parser.error(f"Command '{arguments.command}' is planned for a later step.")
-
     store = RunStore(arguments.db)
     try:
         orchestrator = Orchestrator(store, MockRefundTools(store))
@@ -81,13 +79,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = orchestrator.start_run(arguments.request_id)
         elif arguments.command == "inspect":
             result = orchestrator.inspect_run(arguments.run_id)
-        else:
+        elif arguments.command == "approve":
             result = orchestrator.approve(arguments.run_id, arguments.decision)
-    except (KeyError, ValueError) as exc:
+        elif arguments.command == "resume":
+            result = orchestrator.resume(arguments.run_id, arguments.event)
+        elif arguments.command == "cancel":
+            result = orchestrator.cancel(arguments.run_id)
+        else:
+            result = orchestrator.trace(arguments.run_id)
+    except (KeyError, OrchestrationError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     finally:
         store.close()
 
-    print(json.dumps(result, indent=2, sort_keys=True))
+    if arguments.command == "start":
+        output = {"run_id": result["run"]["run_id"]}
+    elif arguments.command in {"approve", "resume", "cancel"}:
+        run = result["run"]
+        output = {
+            "run_id": run["run_id"],
+            "status": run["status"],
+            "pause_reason": run["pause_reason"],
+            "business_outcome": run["business_outcome"],
+        }
+    else:
+        output = result
+    print(json.dumps(output, indent=2, sort_keys=True))
     return 0

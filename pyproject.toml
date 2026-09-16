@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "gaia-refund-agent"
+name = "ai-agent-orchestration"
 version = "0.1.0"
 description = "Durable orchestration layer for a customer-support refund workflow"
 requires-python = ">=3.11"

@@ -38,5 +38,17 @@ class RefundIssuer(Protocol):
     ) -> dict[str, Any]: ...
 
 
-class RefundWorkflowTools(CaseContextTools, RefundIssuer, Protocol):
+class CustomerNotifier(Protocol):
+    """Send the final refund outcome to a customer."""
+
+    def send_customer_notification(
+        self,
+        *,
+        customer_id: str,
+        message: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]: ...
+
+
+class RefundWorkflowTools(CaseContextTools, RefundIssuer, CustomerNotifier, Protocol):
     """Tool surface currently needed by the refund workflow."""

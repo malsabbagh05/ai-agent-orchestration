@@ -33,6 +33,17 @@ flowchart LR
   process restart.
 - **Execution trace:** stores one record for each step attempt and state transition without secrets.
 
+## Code layout
+
+- `orchestration/engine.py` is the command boundary for start, inspect, approval, resume, cancel,
+  and trace.
+- `orchestration/runner.py` executes one step at a time; `workflow.py` contains the five step
+  handlers and `runner_support.py` persists terminal events.
+- `persistence/store.py` owns SQLite run and step checkpoints. `trace.py`, `idempotency.py`, and
+  `migrations.py` keep those concerns separate.
+- `tools/interfaces.py` defines the narrow tool contracts and `tools/mocks.py` supplies deterministic
+  implementations for the demo and tests.
+
 ## Main execution path
 
 1. The CLI asks the orchestrator to create a run.

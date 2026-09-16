@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from refund_agent.domain.states import BusinessOutcome, PauseReason, RunStatus, StepStatus
+from refund_agent.errors import InvalidTransitionError
 from refund_agent.orchestration import Orchestrator
 from refund_agent.persistence import RunStore
 from refund_agent.tools import MockRefundTools
@@ -25,14 +26,15 @@ def test_approval_pause_happens_before_refund_step(tmp_path) -> None:
     assert paused["steps"][2]["result"] is None
 
     approved = orchestrator.approve(run_id, "approve")
-    assert approved["run"]["status"] == RunStatus.RUNNING.value
-    assert approved["run"]["pause_data"] == {"approval": "approve"}
+    assert approved["run"]["status"] == RunStatus.PAUSED.value
+    assert approved["run"]["pause_reason"] == PauseReason.PROVIDER_CONFIRMATION.value
+    assert approved["run"]["pause_data"]["expected_event"] == "refund.confirmed"
     assert approved["steps"][2]["status"] == StepStatus.COMPLETED.value
     assert approved["steps"][2]["result"]["idempotency_key"] == "refund:REQ-1001"
     assert len(tools.refund_effects) == 1
-    assert orchestrator.approve(run_id, "approve")["run"]["status"] == "running"
+    assert orchestrator.approve(run_id, "approve")["run"]["status"] == "paused"
     assert len(tools.refund_effects) == 1
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidTransitionError):
         orchestrator.approve(run_id, "reject")
     store.close()
 
