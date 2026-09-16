@@ -32,4 +32,5 @@ def test_cli_can_start_and_inspect_a_run(tmp_path: Path, capsys) -> None:
     assert main(["--db", str(database), "inspect", run_id]) == 0
     snapshot = json.loads(capsys.readouterr().out)
     assert snapshot["run"]["status"] == "running"
-    assert snapshot["steps"][0]["status"] == "running"
+    assert snapshot["steps"][0]["status"] == "completed"
+    assert snapshot["steps"][0]["result"]["support_request"]["order_id"] == "ORD-1001"

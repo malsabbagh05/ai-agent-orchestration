@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from .orchestration import Orchestrator
 from .persistence import RunStore
+from .tools import MockSupportRequestReader
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -75,7 +76,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store = RunStore(arguments.db)
     try:
-        orchestrator = Orchestrator(store)
+        orchestrator = Orchestrator(store, MockSupportRequestReader())
         if arguments.command == "start":
             result = orchestrator.start_run(arguments.request_id)
         else:
