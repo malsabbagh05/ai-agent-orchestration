@@ -14,4 +14,21 @@ can be tested without external services.
 - [Run and step state model](docs/state-model.md)
 - [Architecture and design decisions](docs/architecture.md)
 
-Implementation and run instructions will be added next.
+## Development setup
+
+Create a virtual environment and install the development tools:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+```
+
+The CLI scaffold can be checked with:
+
+```bash
+python -m refund_agent --help
+pytest
+```
+
+The workflow commands are being implemented on the `feat/orchestrator-core` branch.
